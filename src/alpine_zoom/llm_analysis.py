@@ -103,17 +103,27 @@ def main():
             print(f"  [{si:3d}] f{scene['best_frame']:5d} MISSING image")
             continue
         for vlabel, vpath in variants:
-            if not args.llm_no_two_stage:
-                task_list.append(lambda vpath=vpath: two_stage_analyze(
-                    args.llm_fast_model, args.llm_reasoning_model, vpath,
-                    mission_context=mission_context))
-            else:
-                task_list.append(lambda vpath=vpath: llm_analyze(
-                    args.llm_fast_model, vpath, prompt))
+             # Fast pass is ALWAYS single-stage (two-stage is deep-pass only).
+            task_list.append(lambda vpath=vpath: llm_analyze(
+                args.llm_fast_model, vpath, prompt))
             task_meta.append((si, vlabel, vpath))
 
     t0 = time.time()
-    results = parallel_llm_batch(task_list, workers=args.llm_parallel)
+    def _on_complete(idx, _result):
+        si, vlabel, vpath = task_meta[idx]
+        scene = scenes[si]
+        result, elapsed, err = _result
+        if err:
+            print(f"    [{si:3d}] f{scene['best_frame']:5d} {vlabel} ERROR: {err[:100]}")
+        else:
+            v_found = result.get("objects_found", False)
+            v_conf = result.get("confidence", 0)
+            v_findings = result.get("findings", [])
+            print(f"    [{si:3d}] f{scene['best_frame']:5d} {vlabel}: "
+                  f"found={v_found} conf={v_conf} findings={len(v_findings)} "
+                  f"({elapsed:.1f}s)")
+
+    results = parallel_llm_batch(task_list, workers=args.llm_parallel, on_complete=_on_complete)
     elapsed_total = time.time() - t0
 
     # Merge results back into scenes
@@ -135,17 +145,12 @@ def main():
 
         for vlabel, vpath, (result, elapsed, err) in variant_data:
             if err:
-                print(f"  [{si:3d}] f{scene['best_frame']:5d} {vlabel} ERROR: {err[:100]}")
                 variant_results[vlabel] = {"error": err[:500]}
                 continue
             variant_results[vlabel] = result
             v_found = result.get("objects_found", False)
             v_conf = result.get("confidence", 0)
             v_findings = result.get("findings", [])
-            stage_tag = " [2-stage]" if not args.llm_no_two_stage else ""
-            print(f"  [{si:3d}] f{scene['best_frame']:5d} {vlabel}: "
-                  f"found={v_found} conf={v_conf} findings={len(v_findings)} "
-                  f"({elapsed:.1f}s){stage_tag}")
             if v_found:
                 merged_found = True
                 merged_conf = max(merged_conf, v_conf)
@@ -273,21 +278,30 @@ def main():
             deep_task_meta.append((scene, path))
 
         t_deep = time.time()
-        deep_results = parallel_llm_batch(deep_task_list, workers=args.llm_parallel)
+
+        # Live progress per completed task (mirrors az-video), even sequential.
+        def _on_deep_complete(idx, _result):
+            scene, path = deep_task_meta[idx]
+            result, elapsed, err = _result
+            if err:
+                print(f"  f{scene['best_frame']:5d} ERROR: {err[:200]}")
+            else:
+                found = result.get("objects_found", False)
+                conf = result.get("confidence", 0)
+                print(f"  f{scene['best_frame']:5d} t={scene.get('time_str','')} "
+                      f"found={found} conf={conf} ({elapsed:.1f}s)")
+
+        deep_results = parallel_llm_batch(deep_task_list, workers=args.llm_parallel,
+                                          on_complete=_on_deep_complete)
         t_deep_total = time.time() - t_deep
 
         for idx, (scene, path) in enumerate(deep_task_meta):
             result, elapsed, err = deep_results[idx]
             if err:
-                print(f"  f{scene['best_frame']:5d} ERROR: {err[:200]}")
                 scene["llm_deep"] = {"error": err[:500]}
             else:
                 scene["llm_deep"] = result
-                found = result.get("objects_found", False)
-                conf = result.get("confidence", 0)
-                print(f"  f{scene['best_frame']:5d} t={scene.get('time_str','')} "
-                      f"found={found} conf={conf} ({elapsed:.1f}s)")
-                if found:
+                if result.get("objects_found", False):
                     for fnd in result.get("findings", []):
                         print(f"      -> {fnd.get('type','?')} {fnd.get('zone','')} "
                               f"color={fnd.get('color','?')} "

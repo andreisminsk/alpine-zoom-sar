@@ -252,18 +252,26 @@ def get_llm_variants(scene, full=False):
 
 # ── Parallel batch execution ──────────────────────────────────────────
 
-def parallel_llm_batch(tasks, workers=4):
+def parallel_llm_batch(tasks, workers=4, on_complete=None):
     """Run a batch of LLM analysis tasks in parallel.
 
     Args:
         tasks: list of callables (no args) that return (result, elapsed, error)
         workers: number of parallel workers (0 or 1 = sequential)
+        on_complete: optional callback(idx, result) invoked as each task finishes,
+            giving live progress even in sequential mode (mirrors az-video).
 
     Returns:
         list of (result, elapsed, error) in the same order as input tasks
     """
     if workers <= 1 or len(tasks) <= 1:
-        return [task() for task in tasks]
+        results = []
+        for i, task in enumerate(tasks):
+            r = task()
+            if on_complete:
+                on_complete(i, r)
+            results.append(r)
+        return results
 
     results = [None] * len(tasks)
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
@@ -271,4 +279,6 @@ def parallel_llm_batch(tasks, workers=4):
         for future in concurrent.futures.as_completed(futures):
             idx = futures[future]
             results[idx] = future.result()
+            if on_complete:
+                on_complete(idx, results[idx])
     return results
