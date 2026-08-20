@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alpine-zoom"
+version = "0.1.0"
+description = "AI-assisted mountain search & rescue video analysis"
+requires-python = ">=3.10"
+dependencies = [
+    "opencv-python>=5.0.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+    "piexif>=1.1.3",
+    "gdown>=6.0.0",
+]
+
+[project.scripts]
+az-video = "alpine_zoom.cli.video:main"
+az-image = "alpine_zoom.cli.image:main"
+az-llm = "alpine_zoom.cli.llm:main"
+az-previews = "alpine_zoom.cli.previews:main"
+az-llm-preview = "alpine_zoom.cli.llm_preview:main"
+az-colors = "alpine_zoom.cli.colors:main"
+az-geometry = "alpine_zoom.cli.geometry:main"
+az-info = "alpine_zoom.cli.info:main"
+az-batch = "alpine_zoom.cli.batch:main"
+az-report = "alpine_zoom.cli.report:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

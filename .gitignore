@@ -1,0 +1,37 @@
+# Source videos — too large for git
+source_video/
+
+# Analysis output — generated, large
+analysis_results/
+find1/
+
+# Model test samples and results
+model_test_samples/
+model_test_results/
+
+# Shadow experiment outputs
+shadow_experiment_output/
+shadow_experiment2_output/
+shadow_experiment3_output/
+
+# Temporary files
+*.part
+all_results.txt
+__pycache__/
+*.pyc
+
+# Ollama
+.ollama/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# uhu coder
+.uhu/
+
+*.log

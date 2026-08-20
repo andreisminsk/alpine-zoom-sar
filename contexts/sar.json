@@ -1,0 +1,9 @@
+{
+  "context": "High mountains above 4000 meters. Looking for lost climbers, signs of their presence, signs of catastrophe. Attention to blue, orange wear or gear, signs of gear use or loss.",
+  "natural_list": "Ice, snow, boulders, cracks, stones, rock formations, minerals, lichen on rocks, red water algae on snow, iron-rich rocks (reddish/orange), shadows from rock formations, falling snow.",
+  "priority_signals": "1. ORANGE SPOT — small discrete bright orange on rock/snow/scree, top priority. Distinguish from lichen (flat/matted on rock) and iron-rich soil (large diffuse areas). When in doubt, report.\n2. BLUE SPOT — almost never natural on mountain terrain. Report even a faint blue tint in a small area.\n3. DARK SPOT on bright snow — the strongest signal overall. Any dark shape on bright snow that is not a shadow or rock.",
+  "target_objects": "Person (small dark/colored shape on snow, could be partially buried). Rope (thin straight or gently curved line — mountains do not produce thin straight lines; look along fall lines, between rocks, at snow patch edges). Tent (polygon shape). Ice axe (thin line with pick). Crampons, backpack, helmet, sleeping bag. Bivouac (dug platform, snow cave entrance, ventilation hole). Fall marks (groove in snow, impact crater, scattered gear trail). Fixed gear (slings/loops on rocks, pitons, anchors, fixed rope on rock faces).",
+  "platform_notes": "",
+  "color_shift_notes": "In shadow on snow, colors shift — a red jacket looks dark gray, blue can look dark. Do NOT rely on color alone. Look for shapes, geometry, shadows, and 'anything that is NOT snow and NOT rock'.",
+  "name": "sar"
+}
