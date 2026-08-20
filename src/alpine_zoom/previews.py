@@ -287,10 +287,11 @@ def copy_llm_finding_scenes(scenes_dir, report):
         fi = s.get("best_frame", 0)
         base = f"scene_{si:02d}_f{fi:05d}"
 
+        # Copy ALL variants (orig + v1..v4) that exist, matching az-video's inline
+        # behavior. Search hq/ first, then lq/, then scenes/ root.
         for v in SCENE_VARIANTS:
-            # Search in hq/, lq/, scenes/
+            fname = base + v
             for sub in ("hq", "lq", ""):
-                fname = base + v
                 src = os.path.join(scenes_dir, sub, fname) if sub else os.path.join(scenes_dir, fname)
                 if os.path.exists(src):
                     dst = os.path.join(findings_dir, os.path.basename(src))
@@ -298,7 +299,7 @@ def copy_llm_finding_scenes(scenes_dir, report):
                     if img is not None:
                         cv2.imwrite(dst, img, [cv2.IMWRITE_JPEG_QUALITY, 95])
                         preview_images.append((s, dst))
-                    break
+                    break   # found this variant in one subdir; move to next variant
 
         findings_scenes.append(s)
         print(f"  Scene {si:04d} f{fi} t={s.get('time_str', '')}")
@@ -312,6 +313,7 @@ def _findings_text_for_scene(scene_dict, img_path):
     lines = []
     llm_fast = scene_dict.get("llm_fast", {})
     llm_deep = scene_dict.get("llm_deep", {})
+    # FAST and DEEP are independent — a scene can be fast-negative but deep-positive.
     if isinstance(llm_fast, dict) and llm_fast.get("objects_found"):
         lines.append("FAST:")
         for fnd in llm_fast.get("findings", []):
@@ -320,10 +322,10 @@ def _findings_text_for_scene(scene_dict, img_path):
             desc = fnd.get("description", "")
             if desc:
                 lines.append(f"  {desc[:80]}")
-        if isinstance(llm_deep, dict) and llm_deep.get("objects_found"):
-            lines.append("DEEP:")
-            for fnd in llm_deep.get("findings", []):
-                lines.append(f"  [{fnd.get('type','?')}] {fnd.get('zone','?')} "
+    if isinstance(llm_deep, dict) and llm_deep.get("objects_found"):
+        lines.append("DEEP:")
+        for fnd in llm_deep.get("findings", []):
+            lines.append(f"  [{fnd.get('type','?')}] {fnd.get('zone','?')} "
                          f"color={fnd.get('color','?')} conf={fnd.get('confidence',0)}")
             desc = fnd.get("description", "")
             if desc:
@@ -391,7 +393,8 @@ def build_llm_findings_preview(output_dir, report=None, scenes_dir=None):
 
 # ── Contact sheet ────────────────────────────────────────────────────
 
-def build_contact_sheet(scenes, video_path, out_dir, fps=30.0):
+def build_contact_sheet(scenes, video_path, out_dir, fps=30.0,
+                        enhance_fn=None, grid_fn=None):
     """Build contact_sheet.jpg — thumbnail grid of all scenes.
 
     Args:
@@ -399,6 +402,8 @@ def build_contact_sheet(scenes, video_path, out_dir, fps=30.0):
         video_path: source video path (for reading best frames)
         out_dir: output directory
         fps: video fps for timestamp display
+        enhance_fn: optional fn(frame) -> enhanced frame (e.g. enhance_frame)
+        grid_fn: optional fn(frame) -> gridded frame (e.g. draw_grid(frame, zones))
     """
     cap = cv2.VideoCapture(video_path)
     thumbs = []
@@ -408,6 +413,10 @@ def build_contact_sheet(scenes, video_path, out_dir, fps=30.0):
         ret, frame = cap.read()
         if not ret:
             continue
+        if enhance_fn is not None:
+            frame = enhance_fn(frame)
+        if grid_fn is not None:
+            frame = grid_fn(frame)
         thumb = cv2.resize(frame, (480, 270))
         llm = scene.get("llm_fast", {})
         found = isinstance(llm, dict) and llm.get("objects_found", False)

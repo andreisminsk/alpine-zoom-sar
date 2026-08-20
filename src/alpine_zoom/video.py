@@ -63,6 +63,12 @@ from alpine_zoom.llm import (
     VISION_PROMPT,
     build_reasoning_prompt,
 )
+from alpine_zoom.previews import (
+    build_llm_findings_preview,
+    build_hq_lq_previews,
+    build_color_anomalies_preview,
+    build_contact_sheet,
+)
 from alpine_zoom.color import (
     detect_color_anomalies,
     draw_color_findings,
@@ -1556,173 +1562,14 @@ def analyze_video(video_path, out_dir, quality_thresh=0.5,
                     scene["llm_deep"]["description"] = best_v.get("description", "")
                     scene["llm_deep"]["terrain"] = best_v.get("terrain", "")
 
-    # ── Contact sheet ─────────────────────────────────────────────────
-    print(f"\n{'='*60}")
-    print("Building contact sheet")
-    print(f"{'='*60}")
+    # ── Contact sheet (shared builder from previews.py) ────────────────
+    build_contact_sheet(scenes, video_path, out_dir, fps=fps,
+                        enhance_fn=enhance_frame,
+                        grid_fn=lambda f: draw_grid(f, zones))
 
-    thumbs = []
-    cap = cv2.VideoCapture(video_path)
-    for si, scene in enumerate(scenes):
-        fi = scene["best_frame"]
-        cap.set(cv2.CAP_PROP_POS_FRAMES, fi)
-        ret, frame = cap.read()
-        if not ret:
-            continue
-        enhanced = enhance_frame(frame)
-        gridded = draw_grid(enhanced, zones)
-        thumb = cv2.resize(gridded, (480, 270))
-        llm = scene.get("llm_fast", {})
-        found = llm.get("objects_found", False) if isinstance(llm, dict) else False
-        conf = llm.get("confidence", 0) if isinstance(llm, dict) else 0
-        color = (0, 0, 255) if found else (0, 255, 0) if conf > 0.3 else (128, 128, 128)
-        cv2.putText(thumb, f"S{si:02d} f{fi} q={scene['best_score']:.0%}",
-                    (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
-        cv2.putText(thumb, f"found={found} conf={conf:.0%}",
-                    (5, 270 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
-        thumbs.append((si, thumb))
-    cap.release()
-
-    if thumbs:
-        cols = 4
-        rows = (len(thumbs) + cols - 1) // cols
-        sheet = np.zeros((rows * 270, cols * 480, 3), dtype=np.uint8)
-        for i, (si, thumb) in enumerate(thumbs):
-            r, c = i // cols, i % cols
-            sheet[r*270:(r+1)*270, c*480:(c+1)*480] = thumb
-        cv2.imwrite(os.path.join(out_dir, "contact_sheet.jpg"), sheet,
-                    [cv2.IMWRITE_JPEG_QUALITY, 85])
-        print(f"  {len(thumbs)} scene thumbnails")
-
-    # ── Copy scenes with LLM findings to llm_findings/ ─────────────────
-    print(f"\n{'='*60}")
-    print("Copying scenes with LLM findings")
-    print(f"{'='*60}")
-
-    findings_dir = os.path.join(scenes_dir, "llm_findings")
-    os.makedirs(findings_dir, exist_ok=True)
-
-    findings_scenes = []
-    for si, scene in enumerate(scenes):
-        llm_fast = scene.get("llm_fast", {})
-        llm_deep = scene.get("llm_deep", {})
-        has_findings = False
-        if isinstance(llm_fast, dict) and llm_fast.get("objects_found", False):
-            has_findings = True
-        if isinstance(llm_deep, dict) and llm_deep.get("objects_found", False):
-            has_findings = True
-        if not has_findings:
-            continue
-
-        # Copy all 4 variants to llm_findings/
-        for key in ("orig_path", "image_path_v1", "image_path_v2", "image_path_v3", "image_path_v4"):
-            src = scene.get(key, "")
-            if src and os.path.exists(src):
-                dst = os.path.join(findings_dir, os.path.basename(src))
-                cv2.imwrite(dst, cv2.imread(src), [cv2.IMWRITE_JPEG_QUALITY, 95])
-
-        findings_scenes.append((si, scene))
-        print(f"  Scene {si:04d} f{scene['best_frame']} t={scene.get('time_str','')}")
-
-    print(f"  {len(findings_scenes)} scenes with findings copied to llm_findings/")
-    # Build scene-to-findings lookup for zone highlighting in previews
-    scene_findings = build_scene_findings_map(scenes)
-
-    # draw_zone_highlights is imported from alpine_zoom.common — takes (frame, zone_findings_dict)
-    # The nested version took (frame, scene_num) and looked up scene_findings internally.
-    # We use a thin wrapper to preserve the call sites below.
-    def _highlight_scene_zones(frame, scene_num):
-        return draw_zone_highlights(frame, scene_findings.get(scene_num, {}))
-
-    # ── Build preview video for llm_findings ───────────────────────────
-    if findings_scenes:
-        print(f"\n{'='*60}")
-        print("Building llm_findings preview video")
-        print(f"{'='*60}")
-
-        import shutil
-        preview_fps = 10
-        preview_duration = 2.0  # 2s per image to allow reading findings text
-        preview_frames_per_img = int(preview_fps * preview_duration)
-        variants_order = ["_orig.jpg", "_grid_v1.jpg", "_grid_v2.jpg", "_grid_v3.jpg", "_grid_v4.jpg"]
-
-        # Collect images in order (all 4 variants per scene)
-        preview_images = []
-        for si, scene in findings_scenes:
-            base = f"scene_{si:02d}_f{scene['best_frame']:05d}"
-            for v in variants_order:
-                p = os.path.join(findings_dir, base + v)
-                if os.path.exists(p):
-                    preview_images.append((si, scene, p))
-
-        if preview_images:
-            sample = cv2.imread(preview_images[0][2])
-            ph, pw = sample.shape[:2]
-            preview_path = os.path.join(out_dir, "preview_llm_findings.mp4")
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            writer = cv2.VideoWriter(preview_path, fourcc, preview_fps, (pw, ph))
-
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.5
-            thickness = 1
-            margin = 10
-
-            for si, scene, img_path in preview_images:
-                frame = cv2.imread(img_path)
-                if frame is None:
-                    continue
-
-                scene_num = si
-                frame_num = scene["best_frame"]
-                timestamp = frame_num / fps
-                h_val = int(timestamp // 3600)
-                m_val = int((timestamp % 3600) // 60)
-                s_val = int(timestamp % 60)
-                cs_val = int((timestamp - int(timestamp)) * 100)
-                time_str = f"{h_val:02d}:{m_val:02d}:{s_val:02d}.{cs_val:02d}"
-
-                # Images already have markers baked in (filename, scene, GPS at y=50+)
-                # Draw LLM findings text on left side, below the baked-in markers (start at y=110)
-
-                # Build findings text from both fast and deep
-                lines = []
-                llm_fast = scene.get("llm_fast", {})
-                llm_deep = scene.get("llm_deep", {})
-                if isinstance(llm_fast, dict) and llm_fast.get("objects_found"):
-                    lines.append("FAST:")
-                    for fnd in llm_fast.get("findings", []):
-                        lines.append(f"  [{fnd.get('type','?')}] {fnd.get('zone','?')} "
-                                     f"color={fnd.get('color','?')} conf={fnd.get('confidence',0)}")
-                        desc = fnd.get("description", "")
-                        if desc:
-                            lines.append(f"  {desc[:80]}")
-                if isinstance(llm_deep, dict) and llm_deep.get("objects_found"):
-                    lines.append("DEEP:")
-                    for fnd in llm_deep.get("findings", []):
-                        lines.append(f"  [{fnd.get('type','?')}] {fnd.get('zone','?')} "
-                                     f"color={fnd.get('color','?')} conf={fnd.get('confidence',0)}")
-                        desc = fnd.get("description", "")
-                        if desc:
-                            lines.append(f"  {desc[:80]}")
-
-                # Draw findings text on left side, below baked-in markers
-                y = 120
-                for line in lines:
-                    draw_text_with_bg(frame, line, margin, y, font, font_scale, thickness, (0, 255, 255))
-                    y += 22
-                    if y > ph - 30:
-                        break
-
-                # Highlight zones with LLM findings
-                frame = _highlight_scene_zones(frame, si)
-
-                for _ in range(preview_frames_per_img):
-                    writer.write(frame)
-
-            writer.release()
-            size_mb = os.path.getsize(preview_path) / 1e6
-            print(f"  {len(preview_images)} images, {len(preview_images) * preview_duration:.0f}s, {size_mb:.1f} MB")
-            print(f"  Saved: {preview_path}")
+    # ── LLM findings preview (shared builder from previews.py) ──────────
+    preview_report = {"scenes": scenes, "video_info": {"fps": fps}}
+    build_llm_findings_preview(out_dir, report=preview_report, scenes_dir=scenes_dir)
 
     # ── Report ─────────────────────────────────────────────────────────
     # Clean scenes for JSON (remove numpy arrays, raw frames)
@@ -1789,112 +1636,11 @@ def analyze_video(video_path, out_dir, quality_thresh=0.5,
 
     # ── Build preview videos (hq + lq + color anomalies) ─────────────
     if build_preview:
-        print(f"\n{'='*60}")
-        print("Building preview videos (hq + lq)")
-        print(f"{'='*60}")
+        preview_report = {"scenes": scenes, "video_info": {"fps": fps}}
+        build_hq_lq_previews(out_dir, report=preview_report, scenes_dir=scenes_dir)
 
-        preview_fps = 10
-        preview_duration = 0.5
-        preview_frames_per_img = int(preview_fps * preview_duration)
-        preview_variants = ["_orig.jpg", "_grid_v1.jpg", "_grid_v2.jpg", "_grid_v3.jpg", "_grid_v4.jpg"]
-
-        def build_preview(subfolder, label):
-            sub_dir = os.path.join(scenes_dir, subfolder)
-            if not os.path.isdir(sub_dir):
-                print(f"  {label}: no folder, skipping")
-                return
-
-            # Collect all 4 variants per scene, sorted chronologically
-            bases = set()
-            for f in os.listdir(sub_dir):
-                if f.endswith("_orig.jpg"):
-                    bases.add(f.replace("_orig.jpg", ""))
-
-            if not bases:
-                print(f"  {label}: no scenes, skipping")
-                return
-
-            images = []
-            for base in sorted(bases, key=lambda b: scene_sort_key(os.path.join(sub_dir, b + "_orig.jpg"))):
-                for v in preview_variants:
-                    p = os.path.join(sub_dir, base + v)
-                    if os.path.exists(p):
-                        images.append(p)
-
-            if not images:
-                print(f"  {label}: no images, skipping")
-                return
-
-            sample = cv2.imread(images[0])
-            ph, pw = sample.shape[:2]
-            preview_path = os.path.join(out_dir, f"preview_{subfolder}.mp4")
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            writer = cv2.VideoWriter(preview_path, fourcc, preview_fps, (pw, ph))
-
-            for img_path in images:
-                frame = cv2.imread(img_path)
-                if frame is None:
-                    continue
-
-                # Highlight zones with LLM findings
-                m = re.match(r'scene_(\d+)_f(\d+)', os.path.basename(img_path))
-                if m:
-                    scene_num = int(m.group(1))
-                    frame = _highlight_scene_zones(frame, scene_num)
-
-                for _ in range(preview_frames_per_img):
-                    writer.write(frame)
-
-            writer.release()
-            size_mb = os.path.getsize(preview_path) / 1e6
-            print(f"  {label}: {len(images)} images, {len(images) * preview_duration:.0f}s, {size_mb:.1f} MB")
-            print(f"  Saved: {preview_path}")
-
-        build_preview("hq", "HQ")
-        build_preview("lq", "LQ")
-
-        # ── Build color anomalies preview (orig + anomaly, 1s each) ──
         if color_anomalies:
-            print(f"\n{'='*60}")
-            print("Building color anomalies preview")
-            print(f"{'='*60}")
-
-            ca_pairs = []  # (orig_path, anomaly_path) — only scenes WITH findings
-            for si, scene in enumerate(scenes):
-                if si not in analyze_set:
-                    continue
-                dyn = scene.get("dynamics", {})
-                if not dyn.get("color_findings"):
-                    continue
-                orig = scene.get("orig_path", "")
-                base = f"scene_{si:02d}_f{scene['best_frame']:05d}"
-                anomaly = os.path.join(anomalies_dir, f"{base}_color_anomalies.jpg")
-                if orig and os.path.exists(orig) and os.path.exists(anomaly):
-                    ca_pairs.append((orig, anomaly))
-
-            if ca_pairs:
-                sample = cv2.imread(ca_pairs[0][0])
-                ph, pw = sample.shape[:2]
-                ca_preview_path = os.path.join(out_dir, "preview_color_anomalies.mp4")
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                ca_fps = 10
-                ca_frames_per_img = int(ca_fps * 1.0)  # 1s per image
-                writer = cv2.VideoWriter(ca_preview_path, fourcc, ca_fps, (pw, ph))
-
-                for orig_path, anomaly_path in ca_pairs:
-                    for img_path in (orig_path, anomaly_path):
-                        frame = cv2.imread(img_path)
-                        if frame is not None:
-                            for _ in range(ca_frames_per_img):
-                                writer.write(frame)
-
-                writer.release()
-                size_mb = os.path.getsize(ca_preview_path) / 1e6
-                n_imgs = len(ca_pairs) * 2
-                print(f"  {n_imgs} images ({len(ca_pairs)} scenes × 2), {n_imgs}s, {size_mb:.1f} MB")
-                print(f"  Saved: {ca_preview_path}")
-            else:
-                print("  No anomaly images found, skipping")
+            build_color_anomalies_preview(out_dir, scenes_dir, report=preview_report)
 
     # ── Summary ───────────────────────────────────────────────────────
     print(f"\n{'='*60}")
