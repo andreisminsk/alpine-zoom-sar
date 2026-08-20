@@ -150,6 +150,8 @@ az-video <video> [options]
 | `--llm-no-two-stage` | off | Disable two-stage LLM for the **deep** pass (on by default). The **fast** pass is always single-stage. Two-stage (deep only): vision model describes scene (no judgment), reasoning model concludes from description + context. Uses `--llm-deep-model` as vision, `--llm-reasoning-model` as reasoning. |
 | `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning model for two-stage mode (text-only, no image). |
 | `--llm-parallel` | `0` | Number of parallel LLM workers (0 = sequential). Cloud models can handle 4+ concurrent requests (~5x speedup). Local models should stay at 0 (VRAM-bound). See `LLM.PARALLELISM.md` for benchmark details. |
+| `--run-standard` | off | Preset: full analysis with LLM. Sets `--color-anomalies --build-preview --llm-run --llm-parallel 4 --llm-pipeline chancepeek`. Individual flags override the preset. |
+| `--run-light` | off | Preset: scenes + images + color anomalies + previews, no LLM. Sets `--color-anomalies --build-preview`. Individual flags override the preset. |
 
 ### Run color anomaly detection on existing results
 ```bash
