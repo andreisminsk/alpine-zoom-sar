@@ -147,7 +147,7 @@ az-video <video> [options]
 | `--recording-time` | None | Override recording time (ISO format, e.g. '2026-08-15 12:08:14'). Use when camera clock is wrong. |
 | `--context-file` | None | Path to JSON mission context config. Overrides `--context-preset` and `--helicopter`. See `contexts/` for examples. |
 | `--context-preset` | None | Named preset: `sar`, `sar-heli`. Overrides `--helicopter`. If neither set, `--helicopter` loads `sar-heli`. |
-| `--llm-no-two-stage` | off | Disable two-stage LLM (on by default). Single-stage: one LLM call per image. Two-stage: vision model describes scene (no judgment), reasoning model concludes from description + context. Uses `--llm-fast-model` as vision, `--llm-reasoning-model` as reasoning. |
+| `--llm-no-two-stage` | off | Disable two-stage LLM for the **deep** pass (on by default). The **fast** pass is always single-stage. Two-stage (deep only): vision model describes scene (no judgment), reasoning model concludes from description + context. Uses `--llm-deep-model` as vision, `--llm-reasoning-model` as reasoning. |
 | `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning model for two-stage mode (text-only, no image). |
 | `--llm-parallel` | `0` | Number of parallel LLM workers (0 = sequential). Cloud models can handle 4+ concurrent requests (~5x speedup). Local models should stay at 0 (VRAM-bound). See `LLM.PARALLELISM.md` for benchmark details. |
 
@@ -246,8 +246,8 @@ az-llm <output_dir> [options]
 | `--llm-pipeline` | `fast` | LLM pipeline mode: `fast` (fastest), `chancepeek` (longer, last hope for false negatives), `max` (longest, deepest assessment of all frame variants). |
 | `--context-file` | None | Path to JSON mission context config. Overrides preset/helicopter/stored context. |
 | `--context-preset` | None | Named preset: `sar`, `sar-heli`. Overrides `--helicopter` and stored context. Falls back to context stored in `report.json` if set. |
-| `--llm-no-two-stage` | off | Disable two-stage LLM (on by default). Single-stage: one LLM call per image. |
-| `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning model for two-stage mode (text-only). |
+| `--llm-no-two-stage` | off | Disable two-stage LLM for the **deep** pass (on by default). The **fast** pass is always single-stage. |
+| `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning model for two-stage deep pass (text-only). |
 | `--llm-parallel` | `0` | Number of parallel LLM workers (0 = sequential). 4 recommended for cloud models. |
 
 ### Report video info
@@ -263,9 +263,9 @@ python -m gdown --folder "https://drive.google.com/drive/folders/FOLDER_ID" -O s
 ### Model comparison
 | Model | Speed | Vision | Status |
 |-------|-------|--------|--------|
-| gemma4:31b-cloud | 6.5s | ✅ | Fast pass — all scenes (single-stage) |
-| qwen3.5:397b-cloud | 54.6s | ✅ | Deep pass — positives only / Two-stage vision model |
-| glm-5.1:cloud | ~3s | ❌ | Two-stage reasoning model (text-only) |
+| gemma4:31b-cloud | 6.5s | ✅ | Fast pass — all scenes (always single-stage) |
+| qwen3.5:397b-cloud | 54.6s | ✅ | Deep pass — positives only / two-stage vision model |
+| glm-5.1:cloud | ~3s | ❌ | Two-stage deep-pass reasoning model (text-only) |
 | minimax-m3:cloud | 14.7s | ✅ | Available as backup |
 
 ## Output Structure

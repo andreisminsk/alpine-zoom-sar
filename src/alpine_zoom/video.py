@@ -1176,13 +1176,9 @@ def analyze_video(video_path, out_dir, quality_thresh=0.5,
             for si, scene in fast_scenes:
                 variants = get_llm_variants(scene, full=llm_pipeline_full)
                 for vlabel, vpath in variants:
-                    if llm_two_stage:
-                        task_list.append(lambda vpath=vpath: two_stage_analyze(
-                            fast_model, llm_reasoning_model, vpath,
-                            mission_context=mission_context))
-                    else:
-                        task_list.append(lambda vpath=vpath: llm_analyze(
-                            fast_model, vpath, prompt=sar_prompt))
+                      # Fast pass is ALWAYS single-stage (two-stage is deep-pass only).
+                    task_list.append(lambda vpath=vpath: llm_analyze(
+                        fast_model, vpath, prompt=sar_prompt))
                     task_meta.append((si, vlabel, vpath))
 
             t_fast_start = time.time()
