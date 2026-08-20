@@ -250,13 +250,6 @@ az-llm <output_dir> [options]
 | `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning model for two-stage mode (text-only). |
 | `--llm-parallel` | `0` | Number of parallel LLM workers (0 = sequential). 4 recommended for cloud models. |
 
-### Check results
-```bash
-python check_all_reports.py   # summarize all videos
-python check_heli.py           # helicopter videos only
-```
-No arguments. Scans `analysis_results/` and prints summary.
-
 ### Report video info
 ```bash
 az-info <video_path> [video_path2 ...]

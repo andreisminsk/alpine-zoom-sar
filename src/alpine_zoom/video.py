@@ -1131,7 +1131,7 @@ def analyze_video(video_path, out_dir, quality_thresh=0.5,
 
             if findings:
                 print(f"  Scene {si:04d} f{scene['best_frame']:05d}: "
-                      f"{len(findings)} findings, zones={flagged_zones}")
+                      f"{len(findings)} findings, zones={scene['dynamics']['flagged_zones']}")
                 for f in findings:
                     print(f"    → {f['color']} Z{f['zone']} area={f['area']} "
                           f"conf={f['confidence']} bbox={f['bbox']}")
