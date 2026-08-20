@@ -1700,7 +1700,7 @@ def main():
                    help="Max scenes to send to fast LLM (spread across timeline). Integer (default 50) or 'all'.")
     p.add_argument("--helicopter", action="store_true",
                    help="Helicopter footage mode — LLM ignores interior passengers/elements")
-    p.add_argument("--llm-pipeline", default="fast",
+    p.add_argument("--llm-pipeline", default=None,
                    choices=["fast", "chancepeek", "max"],
                    help="LLM pipeline mode: 'fast' (default, v3 only, stop-on-find, deep on positives), "
                         "'chancepeek' (deep also runs on fast negatives), "
@@ -1733,11 +1733,38 @@ def main():
     p.add_argument("--llm-reasoning-model", default="glm-5.1:cloud", dest="llm_reasoning_model",
                    help="Reasoning model for two-stage mode (default: glm-5.1:cloud). "
                         "Text-only — no image processing.")
-    p.add_argument("--llm-parallel", type=int, default=0, dest="llm_parallel",
+    p.add_argument("--llm-parallel", type=int, default=None, dest="llm_parallel",
                    help="Number of parallel LLM workers (default 0 = sequential). "
                         "Cloud models can handle 4+ concurrent requests (~5x speedup). "
                         "Local models should stay at 0 (VRAM-bound).")
+    p.add_argument("--run-standard", action="store_true",
+                   help="Preset: full analysis with LLM. Sets --color-anomalies --build-preview "
+                        "--llm-run --llm-parallel 4 --llm-pipeline chancepeek. "
+                        "Individual flags override the preset.")
+    p.add_argument("--run-light", action="store_true",
+                   help="Preset: scenes + images + color anomalies + previews, no LLM. "
+                        "Sets --color-anomalies --build-preview. "
+                        "Individual flags override the preset.")
     args = p.parse_args()
+
+    # Apply presets — explicit flags override preset defaults.
+    if args.run_standard:
+        args.color_anomalies = True
+        args.build_preview = True
+        args.llm_run = True
+        if args.llm_parallel is None:
+            args.llm_parallel = 4
+        if args.llm_pipeline is None:
+            args.llm_pipeline = "chancepeek"
+    if args.run_light:
+        args.color_anomalies = True
+        args.build_preview = True
+
+    # Apply final defaults (after presets so presets can set them)
+    if args.llm_parallel is None:
+        args.llm_parallel = 0
+    if args.llm_pipeline is None:
+        args.llm_pipeline = "fast"
 
      # Default output dir: video filename + ".AZ" (e.g. video1.mp4.AZ/).
       # The .AZ suffix avoids colliding with the source video file when
