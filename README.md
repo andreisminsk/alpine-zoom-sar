@@ -7,13 +7,119 @@ vision-capable LLMs for visual analysis.
 
 ## Setup & Installation
 
-### 1. Python dependencies
+1. **Install Python 3.10 or later**
+   
+   - Download from [python.org](https://www.python.org/downloads/)
+   - On Windows, check "Add Python to PATH" during installation
+   - Verify: `python --version`
+
+2. **Install Ollama**
+   
+   Ollama runs large language models in cloud or locally, including vision-capable models 
+   used by this project for SAR image analysis. It is a lightweight runtime that 
+   downloads and serves LLMs via a local REST API at `http://localhost:11434`.
+
+   - **macOS:** Download installer from https://ollama.com
+   - **Linux:** `curl -fsSL https://ollama.com/install.sh | sh`
+   - **Windows:** Download from https://ollama.com (native build)
+   - **Docker:** `docker pull ollama/ollama && docker run -d -v ollama:/root/.ollama -p 11434:11434 ollama/ollama`
+
+   After installation, Ollama runs as a background service. Verify:
+   ```bash
+   ollama --version
+   ```
+
+   Key commands:
+   - **Pull a model:** `ollama pull <model>` — downloads to local storage
+   - **Run a model:** `ollama run <model>` — starts interactive chat (auto-pulls if missing)
+   - **List models:** `ollama list` — shows installed models
+   - **API server:** `ollama serve` — starts the API server (usually auto-starts on install)
+   - **Vision models:** accept image input via the `/api/chat` endpoint with base64-encoded 
+     images in the message content
+
+   This project primarily uses Ollama cloud models (e.g. `gemma4:31b-cloud`, `qwen3.5:397b-cloud`). 
+   These are hosted models accessed through the Ollama API with a cloud provider — 
+   no local GPU required. Ensure the fast and deep models are available; if not, pull them:
+   ```bash
+   ollama pull gemma4:31b-cloud
+   ollama pull qwen3.5:397b-cloud
+   ```
+
+   For two-stage mode, also pull the reasoning model:
+   ```bash
+   ollama pull glm-5.1:cloud
+   ```
+
+   These model can be overridden by command line options of tools in this toolkit.
+   
+3. **Clone this repository**
+   Assume that you are planning to put the tool into e.g. `~/Projects/` folder, then:
+   
+   ```
+   cd ~/Projects
+   git clone https://github.com/andreisminsk/alpine-zoom-sar.git
+   cd alpine-zoom-sar
+   ```
+
+4. **Create a virtual environment** (macOS/Linux)
+   
+   A virtual environment (venv) is an isolated Python workspace. It keeps this
+   project's dependencies (OpenCV, numpy, Pillow, etc.) separate from your
+   system Python and from other projects, so versions never clash. On macOS and
+   Linux it is **sometimes required** — the system Python is often protected by
+   the OS (e.g. Homebrew or the Xcode toolchain), and `pip install` into it will
+   fail with an "externally-managed-environment" error. A venv sidesteps that.
+   
+   Open a terminal in the `alpine-zoom-sar` folder (e.g. `~/Projects/alpine-zoom-sar`), then:
+   
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+   
+   - `python3 -m venv venv` creates the environment in a `venv/` subfolder (run
+     this **once**, the first time).
+   - `source venv/bin/activate` activates it. Your shell prompt will then show
+     `(venv)` — that means the environment is active and `pip`/`python` now point
+     at it.
+   
+   **On subsequent sessions**, just re-activate before starting any `az-*` tool:
+   
+   ```bash
+   source venv/bin/activate
+   ```
+   
+   **Deactivate** when you're done (or to return to system Python):
+   
+   ```bash
+   deactivate
+   ```
+   
+   **Windows** — the same idea, different commands. In `alpine-zoom-sar`, run in
+   PowerShell or CMD:
+   
+   ```powershell
+   py -3 -m venv venv
+   .\venv\Scripts\Activate.ps1
+   ```
+   
+   (In CMD use `venv\Scripts\activate.bat` instead of the `.ps1`.) If PowerShell
+   blocks the script, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+   
+   **Troubleshooting:**
+   - `python3: command not found` → install Python 3.10+ (step 1) and retry.
+   - `ModuleNotFoundError: No module named 'venv'` (Debian/Ubuntu) →
+     `sudo apt install python3-venv`.
+   - After activating, `az-*` still not found → re-run `pip install -e .`
+     (step 5) **while the venv is active** so the commands install into it.
+
+5. **Python dependencies**
 
 ```bash
 pip install -e .
 ```
 
-This installs 10 console commands on your PATH:
+This installs 11 console commands on your PATH:
 
 | Command | Purpose |
 |---------|---------|
@@ -28,6 +134,7 @@ This installs 10 console commands on your PATH:
 | `az-batch` | Batch-run analysis on all videos in `source_video/` |
 | `az-report` | Summarize findings from report.json files |
 | `az-gdown` | Download a file/folder from Google Drive, or a video from YouTube |
+| `az-context` | Generate a mission context JSON from a text description |
 
 Besides the package this installs all dependencies:
 
@@ -37,7 +144,7 @@ Besides the package this installs all dependencies:
 - `piexif` — EXIF metadata embedding
 - `gdown` — Google Drive folder downloads
 
-### 2. FFmpeg
+6. **FFmpeg**
 
 Required for video probing (`ffprobe`).
 
@@ -50,59 +157,7 @@ Verify:
 ffprobe -version
 ```
 
-### 3. Ollama
-
-Ollama runs large language models locally, including vision-capable models 
-used by this project for SAR image analysis.
-
-#### Install Ollama
-
-- **macOS:** Download installer from https://ollama.com
-- **Linux:** `curl -fsSL https://ollama.com/install.sh | sh`
-- **Windows:** Download from https://ollama.com (native build)
-- **Docker:** `docker pull ollama/ollama && docker run -d -v ollama:/root/.ollama -p 11434:11434 ollama/ollama`
-
-Verify installation:
-```bash
-ollama --version
-```
-
-#### How Ollama works
-
-Ollama is a lightweight runtime that downloads and serves LLMs via a local 
-REST API at `http://localhost:11434`. Key concepts:
-
-- **Pull a model:** `ollama pull <model>` — downloads to local storage
-- **Run a model:** `ollama run <model>` — starts interactive chat (auto-pulls if missing)
-- **List models:** `ollama list` — shows installed models
-- **API server:** `ollama serve` — starts the API server (usually auto-starts on install)
-- **Vision models:** accept image input via the `/api/chat` endpoint with base64-encoded 
-  images in the message content
-
-#### Cloud models
-
-This project uses Ollama cloud models (e.g. `gemma4:31b-cloud`, `qwen3.5:397b-cloud`). 
-These are hosted models accessed through the Ollama API with a cloud provider. 
-No local GPU required — the model runs on remote infrastructure.
-
-#### Verify model availability
-
-```bash
-ollama list
-```
-
-Ensure the fast and deep models are available. If not, pull them:
-```bash
-ollama pull gemma4:31b-cloud
-ollama pull qwen3.5:397b-cloud
-```
-
-For two-stage mode, also pull the reasoning model:
-```bash
-ollama pull glm-5.1:cloud
-```
-
-### 4. Google Drive (optional)
+7. **Google Drive (optional)**
 
 For downloading footage from shared Google Drive folders:
 ```bash
@@ -141,7 +196,7 @@ az-video <video> [options]
 | `--llm-pipeline` | `fast` | LLM pipeline mode: `fast` (fastest — v3 frame variant is assessed, stop-on-find, deep on positives), `chancepeek` (longer — deep also runs on fast negatives, last hope to catch false negatives), `max` (the longest, deepest assessment of all frame variants, no stop-on-find, deep on all variants for positives). |
 | `--from` | None | Start processing from this time (seconds). Default: beginning |
 | `--to` | None | Stop processing at this time (seconds). Default: end |
-| `--llm-run` | off | Run LLM analysis (off by default — generates scenes/images only). Use `llm_analysis.py` to run LLM separately on existing results. |
+| `--llm-run` | off | Run LLM analysis (off by default — generates scenes/images only). Use `az-llm` to run LLM separately on existing results. |
 | `--build-preview` | off | Build preview videos (hq/lq/color anomalies). Off by default to speed up batch processing. |
 | `--dedup-thresh` | `0.90` | Scene deduplication threshold (PASS 2.5). Merges near-duplicate scenes across time gaps using 32×32 grayscale + color histogram similarity. Set to `0` to disable. Catches camera returning to same viewpoint minutes apart. |
 | `--color-anomalies` | off | Enable scene-relative color anomaly detection. Finds small colored regions whose color is statistically rare for the scene (orange, blue, red, green, etc.). Uses LAB colorfulness + histogram rarity. Filters noise via min area (50px), min rarity (2.5), and ignore mask for text markers. Saves annotated images to `scenes/anomalies/` and builds `preview_color_anomalies.mp4` (orig + anomaly, 1s each). |
@@ -259,6 +314,13 @@ az-llm <output_dir> [options]
 az-info <video_path> [video_path2 ...]
 ```
 
+### Summarize findings
+```bash
+az-report <report_path> [report_path2 ...]
+```
+Prints a consolidated summary of LLM findings from one or more `report.json`
+files. Accepts glob patterns, e.g. `az-report analysis_results/VIDEO.HELI/*/report.json`.
+
 ### Download from Google Drive
 ```bash
 # Download a folder
@@ -274,6 +336,58 @@ Requires `yt-dlp` (`pip install yt-dlp`).
 az-gdown youtube "https://www.youtube.com/watch?v=VIDEO_ID" -o output/
 ```
 
+### Generate a mission context from a text description
+```bash
+az-context -i <text or file> -o <output.json> [options]
+```
+Turns a free-text description of a search situation into a structured mission
+context JSON (same schema as `contexts/sar.json`), using a reasoning LLM.
+The output can be fed back into the pipeline via `--context-file`.
+
+| Parameter | Default | Description |
+|-----------|--------|-------------|
+| `-i, --input` | (required) | Situation description: literal text, or path to a text file (auto-detected) |
+| `-o, --output` | (required) | Output JSON path (e.g. `contexts/my-mission.json`) |
+| `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning LLM model (text-only) |
+| `--llm-timeout` | `180` | LLM timeout in seconds |
+| `--name` | output filename stem | Preset name written into the JSON `name` field |
+
+The generated JSON contains the six `MissionContext` fields: `context`,
+`natural_list`, `priority_signals`, `target_objects`, `platform_notes`,
+`color_shift_notes`.
+
+```bash
+az-context -i "Alpine ridge above 4500m, two climbers missing after a fall,
+looking for orange down suit and gear on snow and rock" -o contexts/ridge.json
+az-context -i situation.txt -o contexts/ridge.json --llm-reasoning-model qwen3.5:397b-cloud
+```
+
+### Mission context
+
+The LLM prompt is built from two parts: a built-in **foundational prompt**
+(generic anomaly detection, not editable) plus an optional **mission context**
+(per-mission rules appended to it). Mission context can come from two places:
+
+- **Hardcoded presets** — defined in `src/alpine_zoom/context.py`
+  (`PRESETS = {"sar", "sar-heli"}`). Referenced by name via
+  `--context-preset sar` / `--context-preset sar-heli`. No file needed.
+- **JSON files in `contexts/`** — editable examples/templates. They are **not**
+  auto-loaded; you must specify one explicitly via `--context-file
+  contexts/sar.json`. The `contexts/sar.json` and `contexts/sar-heli.json`
+  files duplicate the hardcoded presets and exist as starting points to copy
+  and customize (e.g. the output of `az-context`).
+
+Resolution priority (highest first):
+
+```
+--context-file  >  --context-preset  >  context stored in report.json  >  --helicopter flag  >  none
+```
+
+- `--context-file contexts/sea.json` → loads your generated/custom file
+- `--context-preset sar` → uses the hardcoded `sar` preset
+- `--helicopter` → auto-loads the hardcoded `sar-heli` preset
+- none of the above → no mission context; only the foundational prompt is used
+
 ### Model comparison
 | Model | Speed | Vision | Status |
 |-------|-------|--------|--------|
@@ -288,26 +402,26 @@ az-gdown youtube "https://www.youtube.com/watch?v=VIDEO_ID" -o output/
 analysis_results/
   <date>/
     <video.MP4>/
-      report.json              # Full analysis report with LLM + dynamics data
-      contact_sheet.jpg        # Thumbnail grid of all scenes
-       preview_hq.mp4           # HQ scenes preview (0.5s/image, 4 variants)
-      preview_lq.mp4           # LQ scenes preview
-      preview_llm_findings.mp4 # LLM findings preview (2s/image, text overlay)
-      preview_color_anomalies.mp4 # Color anomalies preview (if --color-anomalies)
+      report.json                   # Full analysis report with LLM + dynamics data
+      contact_sheet.jpg             # Thumbnail grid of all scenes
+      preview_hq.mp4                # HQ scenes preview (0.5s/image, 4 variants)
+      preview_lq.mp4                # LQ scenes preview
+      preview_llm_findings.mp4      # LLM findings preview (2s/image, text overlay)
+      preview_color_anomalies.mp4   # Color anomalies preview (if --color-anomalies)
       scenes/
-        hq/                    # High-quality scenes (sent to LLM)
+        hq/                          # High-quality scenes (sent to LLM)
           scene_00_f00000_orig.jpg
           scene_00_f00000_grid_v1.jpg
           scene_00_f00000_grid_v2.jpg
           scene_00_f00000_grid_v3.jpg
           scene_00_f00000_grid_v4.jpg
           ...
-        lq/                    # Lower-quality scenes (not analyzed)
+        lq/                          # Lower-quality scenes (not analyzed)
           ...
-        anomalies/             # Color anomaly annotated images
+        anomalies/                   # Color anomaly annotated images
           scene_00_f00000_color_anomalies.jpg
           ...
-        llm_findings/          # Scenes with LLM findings
+        llm_findings/                 # Scenes with LLM findings
           ...
 ```
 ## License

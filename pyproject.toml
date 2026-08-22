@@ -27,6 +27,7 @@ az-info = "alpine_zoom.cli.info:main"
 az-batch = "alpine_zoom.cli.batch:main"
 az-report = "alpine_zoom.cli.report:main"
 az-gdown = "alpine_zoom.cli.gdown:main"
+az-context = "alpine_zoom.cli.context:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
