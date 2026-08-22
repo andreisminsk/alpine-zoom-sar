@@ -14,6 +14,12 @@ shadow_experiment_output/
 shadow_experiment2_output/
 shadow_experiment3_output/
 
+# Build artifacts
+*.egg-info/
+build/
+dist/
+*.egg
+
 # Temporary files
 *.part
 all_results.txt

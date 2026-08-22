@@ -13,7 +13,7 @@ vision-capable LLMs for visual analysis.
 pip install -e .
 ```
 
-This installs 9 console commands on your PATH:
+This installs 10 console commands on your PATH:
 
 | Command | Purpose |
 |---------|---------|
@@ -27,6 +27,7 @@ This installs 9 console commands on your PATH:
 | `az-info` | Report video file info |
 | `az-batch` | Batch-run analysis on all videos in `source_video/` |
 | `az-report` | Summarize findings from report.json files |
+| `az-gdown` | Download a file/folder from Google Drive, or a video from YouTube |
 
 Besides the package this installs all dependencies:
 
@@ -252,6 +253,7 @@ az-llm <output_dir> [options]
 | `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning model for two-stage deep pass (text-only). |
 | `--llm-parallel` | `0` | Number of parallel LLM workers (0 = sequential). 4 recommended for cloud models. |
 
+
 ### Report video info
 ```bash
 az-info <video_path> [video_path2 ...]
@@ -259,7 +261,17 @@ az-info <video_path> [video_path2 ...]
 
 ### Download from Google Drive
 ```bash
-python -m gdown --folder "https://drive.google.com/drive/folders/FOLDER_ID" -O source_video/DATE
+# Download a folder
+az-gdown dir "https://drive.google.com/drive/folders/FOLDER_ID" -o source_video/DATE
+
+# Download a single file
+az-gdown file "https://drive.google.com/file/d/FILE_ID/view" -o source_video/
+```
+
+### Download a YouTube video
+Requires `yt-dlp` (`pip install yt-dlp`).
+```bash
+az-gdown youtube "https://www.youtube.com/watch?v=VIDEO_ID" -o output/
 ```
 
 ### Model comparison

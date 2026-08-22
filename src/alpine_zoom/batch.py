@@ -16,7 +16,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 SOURCE_ROOT = "source_video"
 RESULTS_ROOT = "analysis_results"
-VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v"}
+VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm"}
 
 # Default params (same as tested)
 STRIDE = "dynamic"
