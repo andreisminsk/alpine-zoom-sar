@@ -201,6 +201,7 @@ By default, `--llm-run`, `--build-preview`, and `--color-anomalies` are enabled.
 | `--context-preset` | None | Named preset: `sar`, `sar-heli` |
 | `--no-llm-run` | off | Skip LLM analysis (generate scenes/images only) |
 | `--no-build-preview` | off | Skip building preview videos |
+| `--enforce-thresholds` | off | Do not auto-relax quality/scene thresholds for low-quality video (auto-relaxes if <5 frames, <2% pass rate, or <0.5 frames/s) |
 | `--no-color-anomalies` | off | Skip color anomaly detection |
 
 ### Analyze single video
@@ -226,6 +227,7 @@ az-video <video> [options]
 | `--build-preview` | off | Build preview videos (hq/lq/color anomalies). Off by default to speed up batch processing. |
 | `--dedup-thresh` | `0.90` | Scene deduplication threshold (PASS 2.5). Merges near-duplicate scenes across time gaps using 32×32 grayscale + color histogram similarity. Set to `0` to disable. Catches camera returning to same viewpoint minutes apart. |
 | `--color-anomalies` | off | Enable scene-relative color anomaly detection. Finds small colored regions whose color is statistically rare for the scene (orange, blue, red, green, etc.). Uses LAB colorfulness + histogram rarity. Filters noise via min area (50px), min rarity (2.5), and ignore mask for text markers. Saves annotated images to `scenes/anomalies/` and builds `preview_color_anomalies.mp4` (orig + anomaly, 1s each). |
+| `--enforce-thresholds` | off | Do not auto-relax quality/scene thresholds for low-quality video. By default, if the quality scan produces too few frames (<5 frames, <2% pass rate, or <0.5 frames/second of video), thresholds are automatically relaxed (quality→0.3, scene-sim→0.55) and the scan is re-run. This handles drone footage with fast motion, blur, or low contrast. |
 | `--recording-time` | None | Override recording time (ISO format, e.g. '2026-08-15 12:08:14'). Use when camera clock is wrong. |
 | `--context-file` | None | Path to JSON mission context config. Overrides `--context-preset` and `--helicopter`. See `contexts/` for examples. |
 | `--context-preset` | `sar` | Named preset: `sar`, `sar-heli`. Overrides `--helicopter`. Default (none specified) loads `sar`. |

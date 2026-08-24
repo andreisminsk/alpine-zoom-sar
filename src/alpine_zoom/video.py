@@ -676,7 +676,7 @@ def analyze_video(video_path, out_dir, quality_thresh=0.5,
                   color_anomalies=False, llm_run=False, build_preview=False,
                   dedup_thresh=DEDUP_COMBINED_THRESH, mission_context=None,
                   llm_two_stage=False, llm_reasoning_model="glm-5.1:cloud",
-                  llm_parallel=0):
+                  llm_parallel=0, enforce_thresholds=False):
     analysis_start = time.time()
     os.makedirs(out_dir, exist_ok=True)
     scenes_dir = os.path.join(out_dir, "scenes")
@@ -853,6 +853,105 @@ def analyze_video(video_path, out_dir, quality_thresh=0.5,
     print(f"\nQuality scan: {len(quality_frames)} frames passed "
           f"(threshold={quality_thresh}, mode={stride_mode})")
 
+    # ── Adaptive threshold relaxation ──────────────────────────────────
+    # If very few frames passed, the video is likely low-quality drone footage
+    # (blurry, fast motion, low contrast). Relax thresholds and re-scan.
+    MIN_QUALITY_FRAMES = 5
+    MIN_QUALITY_RATIO = 0.02  # Less than 2% of scanned frames passing
+    MIN_QUALITY_DENSITY = 0.5  # Less than 0.5 quality frames per second of video
+    RELAXED_QUALITY = 0.3
+    RELAXED_SCENE_SIM = 0.55
+
+    video_duration = total / fps if fps > 0 else 0
+    quality_density = len(quality_frames) / max(video_duration, 1)
+    quality_ratio = len(quality_frames) / max(scanned, 1) if scanned > 0 else 0
+
+    needs_relaxation = (not enforce_thresholds and (
+        (len(quality_frames) < MIN_QUALITY_FRAMES and quality_ratio < MIN_QUALITY_RATIO)
+        or quality_density < MIN_QUALITY_DENSITY
+    ))
+
+    if needs_relaxation:
+        orig_quality = quality_thresh
+        orig_scene_sim = scene_sim_thresh
+        quality_thresh = RELAXED_QUALITY
+        scene_sim_thresh = RELAXED_SCENE_SIM
+        print(f"\n⚠️  Too few quality frames ({len(quality_frames)}/{scanned} = "
+              f"{quality_ratio*100:.1f}%, density={quality_density:.2f}/s). "
+              f"Video appears low-quality (drone/fast motion).")
+        print(f"    Relaxing thresholds: quality {orig_quality}→{quality_thresh}, "
+              f"scene-sim {orig_scene_sim}→{scene_sim_thresh}")
+        print(f"    (Use --enforce-thresholds to disable auto-relaxation)")
+
+        # Re-scan with relaxed thresholds
+        quality_frames = []
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"ERROR: Cannot open video: {video_path}")
+            sys.exit(1)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        from_frame = 0 if from_sec is None else int(from_sec * fps)
+        to_frame = total_frames if to_sec is None else int(to_sec * fps)
+        if from_frame > 0:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, from_frame)
+        frame_idx = from_frame if from_frame > 0 else 0
+        gray_prev = None
+        dyn_current_stride = 10
+        dyn_frames_since_last = 0
+        dyn_force_sample = False
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            if frame_idx >= to_frame:
+                break
+            should_sample = False
+            if is_dynamic:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                if gray_prev is not None:
+                    try:
+                        shift, resp = cv2.phaseCorrelate(
+                            gray_prev.astype(np.float64), gray.astype(np.float64))
+                        mag = np.hypot(shift[0], shift[1])
+                    except Exception:
+                        mag = 0
+                    if mag > DYN_ZOOM_SPIKE:
+                        dyn_current_stride = DYN_MIN_STRIDE
+                        dyn_force_sample = True
+                    elif mag > DYN_FAST_THRESH:
+                        dyn_current_stride = DYN_MIN_STRIDE
+                    elif mag > DYN_MODERATE_THRESH:
+                        dyn_current_stride = max(DYN_MIN_STRIDE, min(DYN_MAX_STRIDE, dyn_current_stride - 1))
+                    else:
+                        dyn_current_stride = min(DYN_MAX_STRIDE, dyn_current_stride + 1)
+                else:
+                    mag = 0
+                dyn_frames_since_last += 1
+                should_sample = dyn_frames_since_last >= dyn_current_stride or dyn_force_sample
+                if should_sample:
+                    dyn_force_sample = False
+            else:
+                should_sample = frame_idx % fixed_stride == 0
+                if should_sample:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            if should_sample:
+                if is_dynamic:
+                    dyn_frames_since_last = 0
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if not is_dynamic else gray
+                score, reasons = frame_quality(gray, gray_prev, helicopter=helicopter)
+                if score >= quality_thresh:
+                    sig = frame_signature(gray)
+                    quality_frames.append((frame_idx, gray, score, reasons, sig))
+                gray_prev = gray
+            frame_idx += 1
+
+        cap.release()
+        print(f"    Re-scan: {len(quality_frames)} frames passed "
+              f"(threshold={quality_thresh})")
+
     # ── PASS 2: Group into scenes ─────────────────────────────────────
     print(f"\n{'='*60}")
     print("PASS 2: Grouping into distinct scenes")
@@ -941,8 +1040,9 @@ def analyze_video(video_path, out_dir, quality_thresh=0.5,
 
         # Save 4 files: original, v1 high-contrast+grid, v2 gentle-clahe+grid, v3 aggressive-shadow+grid
         # HQ scenes (sent to LLM) go to hq/, the rest to lq/
+        # Scenes below LLM_MIN_QUALITY also go to lq/ even if in analyze_set
         base = f"scene_{si:02d}_f{fi:05d}"
-        scene_dir = hq_dir if si in analyze_set else lq_dir
+        scene_dir = hq_dir if (si in analyze_set and scene.get("best_score", 0) >= LLM_MIN_QUALITY) else lq_dir
         orig_path = os.path.join(scene_dir, f"{base}_orig.jpg")
         grid_v1_path = os.path.join(scene_dir, f"{base}_grid_v1.jpg")
         grid_v2_path = os.path.join(scene_dir, f"{base}_grid_v2.jpg")
@@ -1735,6 +1835,10 @@ def main():
     p.add_argument("--llm-reasoning-model", default="glm-5.1:cloud", dest="llm_reasoning_model",
                    help="Reasoning model for two-stage mode (default: glm-5.1:cloud). "
                         "Text-only — no image processing.")
+    p.add_argument("--enforce-thresholds", action="store_true", dest="enforce_thresholds",
+                   help="Do not auto-relax quality/scene thresholds for low-quality video. "
+                        "By default, if very few frames pass quality scan, thresholds are "
+                        "relaxed (quality→0.3, scene-sim→0.55) and the scan is re-run.")
     p.add_argument("--llm-parallel", type=int, default=None, dest="llm_parallel",
                    help="Number of parallel LLM workers (default 0 = sequential). "
                         "Cloud models can handle 4+ concurrent requests (~5x speedup). "
@@ -1798,6 +1902,7 @@ def main():
         llm_two_stage=not args.llm_no_two_stage,
         llm_reasoning_model=args.llm_reasoning_model,
         llm_parallel=args.llm_parallel,
+        enforce_thresholds=args.enforce_thresholds,
      )
 
 

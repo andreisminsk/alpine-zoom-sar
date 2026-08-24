@@ -77,6 +77,10 @@ def main():
                     help="Do NOT run LLM analysis (generate scenes/images only)")
     ap.add_argument("--no-build-preview", action="store_true", dest="no_build_preview",
                     help="Do NOT build preview videos")
+    ap.add_argument("--enforce-thresholds", action="store_true", dest="enforce_thresholds",
+                    help="Do not auto-relax quality/scene thresholds for low-quality video. "
+                         "By default, if very few frames pass quality scan, thresholds are "
+                         "relaxed (quality→0.3, scene-sim→0.55) and the scan is re-run.")
     ap.add_argument("--no-color-anomalies", action="store_true", dest="no_color_anomalies",
                     help="Do NOT run color anomaly detection")
     args = ap.parse_args()
@@ -157,6 +161,9 @@ def main():
         # Parallel
         if args.llm_parallel > 0:
             cmd.extend(["--llm-parallel", str(args.llm_parallel)])
+        # Enforce thresholds
+        if args.enforce_thresholds:
+            cmd.append("--enforce-thresholds")
 
         result = None
         try:
