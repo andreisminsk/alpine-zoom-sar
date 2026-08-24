@@ -726,9 +726,15 @@ def analyze_video(video_path, out_dir, quality_thresh=0.5,
 
     sar_prompt = build_prompt(helicopter=helicopter, mission_context=mission_context)
     if mission_context:
-        print(f"Mission context: {mission_context.name or 'custom'}")
-    elif helicopter:
-        print("Mission context: sar-heli (auto from --helicopter)")
+        ctx_name = mission_context.name or 'custom'
+        if args.context_file:
+            print(f"Mission context: {ctx_name} (from --context-file)")
+        elif args.context_preset:
+            print(f"Mission context: {ctx_name} (from --context-preset)")
+        elif args.helicopter:
+            print(f"Mission context: {ctx_name} (auto from --helicopter)")
+        else:
+            print(f"Mission context: {ctx_name} (default)")
     else:
         print("Mission context: none (foundational prompt only)")
     if helicopter:
@@ -1724,8 +1730,8 @@ def main():
     p.add_argument("--context-file", default=None, dest="context_file",
                    help="Path to JSON mission context config. Overrides --context-preset and --helicopter.")
     p.add_argument("--context-preset", default=None, dest="context_preset",
-                   help="Named mission context preset: 'sar', 'sar-heli'. "
-                        "Overrides --helicopter. If neither is set, --helicopter loads 'sar-heli'.")
+                       help="Named preset: 'sar', 'sar-heli'. "
+                         "Overrides --helicopter. Default (none specified) loads 'sar'.")
     p.add_argument("--llm-no-two-stage", action="store_true", dest="llm_no_two_stage",
                    help="Disable two-stage LLM mode (on by default). Use single-stage: one LLM call per image. "
                         "Two-stage: vision model describes scene, reasoning model concludes. "
@@ -1772,7 +1778,7 @@ def main():
     if args.output is None:
         args.output = os.path.basename(args.video) + ".AZ"
 
-     # Resolve mission context: --context-file > --context-preset > --helicopter > None
+     # Resolve mission context: --context-file > --context-preset > --helicopter > default (sar)
     mission_context = get_context(
         preset=args.context_preset,
         context_file=args.context_file,

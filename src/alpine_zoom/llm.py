@@ -75,7 +75,8 @@ def resolve_mission_context(context_file=None, context_preset=None,
         ctx = get_context(helicopter=True)
         return ctx, "helicopter flag (sar-heli preset)"
 
-    return None, "none (foundational prompt only)"
+    ctx = get_context()  # default_sar=True → loads 'sar' preset
+    return ctx, "default (sar preset)"
 
 
 # ── Image encoding ───────────────────────────────────────────────────

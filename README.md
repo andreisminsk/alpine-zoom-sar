@@ -174,14 +174,34 @@ pip install gdown
 
 ### Analyze all videos
 ```bash
-az-batch
+az-batch [options]
 ```
-No arguments. Processes all videos in `source_video/`, creates output in `analysis_results/`.
+Processes all videos in `source_video/`, creates output in `analysis_results/`.
 Skips videos with existing `report.json`. Auto-detects helicopter folders (HELI in name).
 
-Batch runner uses overridden defaults: `--scene-sim 0.65` (more aggressive grouping),
-`--llm-scenes-cap 50`, `--llm-deep-max-scenes 20`. Always passes `--llm-run` and
-`--build-preview` to generate full results per video.
+All `az-video` parameters are available as `az-batch` arguments and passed through.
+Batch defaults are tuned for bulk processing (e.g. `--scene-sim 0.65` instead of 0.82).
+By default, `--llm-run`, `--build-preview`, and `--color-anomalies` are enabled.
+
+| Parameter | Default | Description |
+|-----------|--------|-------------|
+| `--stride` | `dynamic` | Frame sampling interval (passed to az-video) |
+| `--quality` | `0.5` | Quality threshold (passed to az-video) |
+| `--scene-sim` | `0.65` | Scene similarity threshold (az-video default is 0.82) |
+| `--dedup-thresh` | `0.90` | Scene deduplication threshold (passed to az-video) |
+| `--llm-scenes-cap` | `50` | Max scenes for fast LLM |
+| `--llm-deep-max-scenes` | `20` | Max scenes for deep LLM |
+| `--llm-fast-model` | `gemma4:31b-cloud` | Fast LLM model |
+| `--llm-deep-model` | `qwen3.5:397b-cloud` | Deep LLM model |
+| `--llm-pipeline` | `fast` | LLM pipeline mode: `fast`, `chancepeek`, `max` |
+| `--llm-parallel` | `0` | Parallel LLM workers (0 = sequential, 4 for cloud) |
+| `--llm-no-two-stage` | off | Disable two-stage LLM for deep pass |
+| `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning model for two-stage mode |
+| `--context-file` | None | Path to JSON mission context config |
+| `--context-preset` | None | Named preset: `sar`, `sar-heli` |
+| `--no-llm-run` | off | Skip LLM analysis (generate scenes/images only) |
+| `--no-build-preview` | off | Skip building preview videos |
+| `--no-color-anomalies` | off | Skip color anomaly detection |
 
 ### Analyze single video
 ```bash
@@ -208,7 +228,7 @@ az-video <video> [options]
 | `--color-anomalies` | off | Enable scene-relative color anomaly detection. Finds small colored regions whose color is statistically rare for the scene (orange, blue, red, green, etc.). Uses LAB colorfulness + histogram rarity. Filters noise via min area (50px), min rarity (2.5), and ignore mask for text markers. Saves annotated images to `scenes/anomalies/` and builds `preview_color_anomalies.mp4` (orig + anomaly, 1s each). |
 | `--recording-time` | None | Override recording time (ISO format, e.g. '2026-08-15 12:08:14'). Use when camera clock is wrong. |
 | `--context-file` | None | Path to JSON mission context config. Overrides `--context-preset` and `--helicopter`. See `contexts/` for examples. |
-| `--context-preset` | None | Named preset: `sar`, `sar-heli`. Overrides `--helicopter`. If neither set, `--helicopter` loads `sar-heli`. |
+| `--context-preset` | None | Named preset: `sar`, `sar-heli`. Overrides `--helicopter`. Default (none specified) loads `sar`. |
 | `--llm-no-two-stage` | off | Disable two-stage LLM for the **deep** pass (on by default). The **fast** pass is always single-stage. Two-stage (deep only): vision model describes scene (no judgment), reasoning model concludes from description + context. Uses `--llm-deep-model` as vision, `--llm-reasoning-model` as reasoning. |
 | `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning model for two-stage mode (text-only, no image). |
 | `--llm-parallel` | `0` | Number of parallel LLM workers (0 = sequential). Cloud models can handle 4+ concurrent requests (~5x speedup). Local models should stay at 0 (VRAM-bound). See `LLM.PARALLELISM.md` for benchmark details. |
@@ -386,13 +406,13 @@ The LLM prompt is built from two parts: a built-in **foundational prompt**
 Resolution priority (highest first):
 
 ```
---context-file  >  --context-preset  >  context stored in report.json  >  --helicopter flag  >  none
+--context-file  >  --context-preset  >  context stored in report.json  >  --helicopter flag  >  default (sar)
 ```
 
 - `--context-file contexts/sea.json` → loads your generated/custom file
 - `--context-preset sar` → uses the hardcoded `sar` preset
 - `--helicopter` → auto-loads the hardcoded `sar-heli` preset
-- none of the above → no mission context; only the foundational prompt is used
+- none of the above → default `sar` preset is used (mountain SAR context)
 
 ### Model comparison
 | Model | Speed | Vision | Status |

@@ -206,10 +206,12 @@ def load_context(path):
     )
 
 
-def get_context(preset=None, context_file=None, helicopter=False):
+def get_context(preset=None, context_file=None, helicopter=False, default_sar=True):
     """Resolve a MissionContext from preset name, file path, or helicopter flag.
 
-    Priority: context_file > preset > helicopter flag > None.
+    Priority: context_file > preset > helicopter flag > default_sar.
+    When default_sar=True and nothing else is specified, loads the 'sar' preset.
+    Set default_sar=False to return None instead (foundational prompt only).
     """
     if context_file:
         return load_context(context_file)
@@ -219,6 +221,8 @@ def get_context(preset=None, context_file=None, helicopter=False):
         return PRESETS[preset]()
     if helicopter:
         return default_sar_heli_context()
+    if default_sar:
+        return PRESETS["sar"]()
     return None
 
 

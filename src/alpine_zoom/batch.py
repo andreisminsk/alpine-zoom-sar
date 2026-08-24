@@ -5,6 +5,10 @@ For each video, creates a dedicated output folder under analysis_results/
 mirroring the source structure, e.g.:
   source_video/2026-08-11/DJI_xxx.MP4
   → analysis_results/2026-08-11/DJI_xxx.MP4/
+
+All az-video parameters are available as az-batch arguments and passed through.
+Defaults match az-batch's tuned values (e.g. --scene-sim 0.65) rather than
+az-video's single-video defaults.
 """
 import sys
 import os
@@ -17,15 +21,6 @@ sys.stdout.reconfigure(encoding="utf-8")
 SOURCE_ROOT = "source_video"
 RESULTS_ROOT = "analysis_results"
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm"}
-
-# Default params (same as tested)
-STRIDE = "dynamic"
-QUALITY = 0.5
-SCENE_SIM = 0.65
-MAX_SCENES = 50
-DEEP_TOP = 20
-FAST_MODEL = "gemma4:31b-cloud"
-DEEP_MODEL = "qwen3.5:397b-cloud"
 
 
 def find_videos(root):
@@ -42,19 +37,48 @@ def find_videos(root):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Batch-run SAR scene analyzer on all videos")
+    ap = argparse.ArgumentParser(
+        description="Batch-run SAR scene analyzer on all videos",
+        epilog="All parameters are passed through to az-video. "
+               "Defaults are tuned for batch processing (e.g. --scene-sim 0.65).")
+    # ── Video processing ──────────────────────────────────────────────
+    ap.add_argument("--stride", default="dynamic",
+                    help="Frame sampling interval: integer or 'dynamic' (default: dynamic)")
+    ap.add_argument("--quality", type=float, default=0.5,
+                    help="Quality threshold 0-1 (default: 0.5)")
+    ap.add_argument("--scene-sim", type=float, default=0.65,
+                    help="Scene similarity threshold 0-1 (default: 0.65, more aggressive than az-video's 0.82)")
+    ap.add_argument("--dedup-thresh", type=float, default=0.90,
+                    help="Scene deduplication threshold (default: 0.90, set 0 to disable)")
+    # ── LLM ───────────────────────────────────────────────────────────
+    ap.add_argument("--llm-scenes-cap", type=int, default=50, dest="llm_scenes_cap",
+                    help="Max scenes to send to fast LLM (default: 50)")
+    ap.add_argument("--llm-deep-max-scenes", type=int, default=20, dest="llm_deep_max_scenes",
+                    help="Max scenes to send to deep LLM (default: 20)")
+    ap.add_argument("--llm-fast-model", default="gemma4:31b-cloud", dest="llm_fast_model",
+                    help="Fast LLM model (default: gemma4:31b-cloud)")
+    ap.add_argument("--llm-deep-model", default="qwen3.5:397b-cloud", dest="llm_deep_model",
+                    help="Deep LLM model (default: qwen3.5:397b-cloud)")
+    ap.add_argument("--llm-pipeline", default="fast", choices=["fast", "chancepeek", "max"],
+                    help="LLM pipeline mode (default: fast)")
+    ap.add_argument("--llm-parallel", type=int, default=0, dest="llm_parallel",
+                    help="Number of parallel LLM workers (default: 0 = sequential, 4 recommended for cloud)")
+    ap.add_argument("--llm-no-two-stage", action="store_true", dest="llm_no_two_stage",
+                    help="Disable two-stage LLM mode (on by default)")
+    ap.add_argument("--llm-reasoning-model", default="glm-5.1:cloud", dest="llm_reasoning_model",
+                    help="Reasoning model for two-stage mode (default: glm-5.1:cloud)")
+    # ── Context ───────────────────────────────────────────────────────
     ap.add_argument("--context-file", default=None, dest="context_file",
                     help="Path to JSON mission context config. Passed to all videos.")
     ap.add_argument("--context-preset", default=None, dest="context_preset",
                     help="Named preset: 'sar', 'sar-heli'. Passed to all videos.")
-    ap.add_argument("--llm-no-two-stage", action="store_true", dest="llm_no_two_stage",
-                    help="Disable two-stage LLM mode (on by default). Use single-stage instead.")
-    ap.add_argument("--llm-reasoning-model", default="glm-5.1:cloud", dest="llm_reasoning_model",
-                    help="Reasoning model for two-stage mode (default: glm-5.1:cloud).")
-    ap.add_argument("--llm-pipeline", default="fast", choices=["fast", "chancepeek", "max"],
-                    help="LLM pipeline mode: 'fast' (default), 'chancepeek' (deep on fast negatives), 'max' (all variants).")
-    ap.add_argument("--llm-parallel", type=int, default=0, dest="llm_parallel",
-                    help="Number of parallel LLM workers (default 0 = sequential). 4 recommended for cloud models.")
+    # ── Output options ─────────────────────────────────────────────────
+    ap.add_argument("--no-llm-run", action="store_true", dest="no_llm_run",
+                    help="Do NOT run LLM analysis (generate scenes/images only)")
+    ap.add_argument("--no-build-preview", action="store_true", dest="no_build_preview",
+                    help="Do NOT build preview videos")
+    ap.add_argument("--no-color-anomalies", action="store_true", dest="no_color_anomalies",
+                    help="Do NOT run color anomaly detection")
     args = ap.parse_args()
 
     if not os.path.isdir(SOURCE_ROOT):
@@ -98,32 +122,39 @@ def main():
             sys.executable, "-m", "alpine_zoom.cli.video",
             full_path,
             "-o", out_dir,
-            "--stride", str(STRIDE),
-            "--quality", str(QUALITY),
-            "--scene-sim", str(SCENE_SIM),
-            "--llm-scenes-cap", str(MAX_SCENES),
-            "--llm-deep-max-scenes", str(DEEP_TOP),
-            "--llm-fast-model", FAST_MODEL,
-            "--llm-deep-model", DEEP_MODEL,
-            "--llm-run",
-            "--llm-pipeline", "fast",
-            "--llm-parallel", "0",
-            "--color-anomalies",
-            "--build-preview",
+            "--stride", str(args.stride),
+            "--quality", str(args.quality),
+            "--scene-sim", str(args.scene_sim),
+            "--dedup-thresh", str(args.dedup_thresh),
+            "--llm-scenes-cap", str(args.llm_scenes_cap),
+            "--llm-deep-max-scenes", str(args.llm_deep_max_scenes),
+            "--llm-fast-model", args.llm_fast_model,
+            "--llm-deep-model", args.llm_deep_model,
+            "--llm-pipeline", args.llm_pipeline,
         ]
+        # LLM run (on by default)
+        if not args.no_llm_run:
+            cmd.append("--llm-run")
+        # Preview (on by default)
+        if not args.no_build_preview:
+            cmd.append("--build-preview")
+        # Color anomalies (on by default)
+        if not args.no_color_anomalies:
+            cmd.append("--color-anomalies")
+        # Helicopter mode
         if is_helicopter:
             cmd.append("--helicopter")
+        # Context
         if args.context_file:
             cmd.extend(["--context-file", args.context_file])
         elif args.context_preset:
             cmd.extend(["--context-preset", args.context_preset])
+        # Two-stage LLM
         if not args.llm_no_two_stage:
-            # Two-stage is on by default — pass --llm-reasoning-model
             cmd.extend(["--llm-reasoning-model", args.llm_reasoning_model])
         else:
             cmd.append("--llm-no-two-stage")
-        if args.llm_pipeline != "fast":
-            cmd.extend(["--llm-pipeline", args.llm_pipeline])
+        # Parallel
         if args.llm_parallel > 0:
             cmd.extend(["--llm-parallel", str(args.llm_parallel)])
 
