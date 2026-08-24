@@ -727,14 +727,10 @@ def analyze_video(video_path, out_dir, quality_thresh=0.5,
     sar_prompt = build_prompt(helicopter=helicopter, mission_context=mission_context)
     if mission_context:
         ctx_name = mission_context.name or 'custom'
-        if args.context_file:
-            print(f"Mission context: {ctx_name} (from --context-file)")
-        elif args.context_preset:
-            print(f"Mission context: {ctx_name} (from --context-preset)")
-        elif args.helicopter:
-            print(f"Mission context: {ctx_name} (auto from --helicopter)")
+        if helicopter:
+            print(f"Mission context: {ctx_name} (helicopter mode)")
         else:
-            print(f"Mission context: {ctx_name} (default)")
+            print(f"Mission context: {ctx_name}")
     else:
         print("Mission context: none (foundational prompt only)")
     if helicopter:
