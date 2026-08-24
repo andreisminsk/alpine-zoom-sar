@@ -1,0 +1,1 @@
+uhu --api-openai --model Youssofal--Qwen3.8-27B-MTPLX-Optimized-Speed-FP16 --host http://127.0.0.1:8000

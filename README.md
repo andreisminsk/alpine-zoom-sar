@@ -174,7 +174,11 @@ pip install gdown
 
 ### Analyze all videos
 ```bash
+# Basic usage
 az-batch [options]
+
+# Example of optimal use with cloud models
+az-batch --llm-pipeline chancepeek --llm-parallel 4
 ```
 Processes all videos in `source_video/`, creates output in `analysis_results/`.
 Skips videos with existing `report.json`. Auto-detects helicopter folders (HELI in name).
