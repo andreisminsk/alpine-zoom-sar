@@ -106,6 +106,9 @@ def main():
             "--llm-fast-model", FAST_MODEL,
             "--llm-deep-model", DEEP_MODEL,
             "--llm-run",
+            "--llm-pipeline", "fast",
+            "--llm-parallel", "0",
+            "--color-anomalies",
             "--build-preview",
         ]
         if is_helicopter:
