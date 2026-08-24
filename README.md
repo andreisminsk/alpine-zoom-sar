@@ -228,7 +228,7 @@ az-video <video> [options]
 | `--color-anomalies` | off | Enable scene-relative color anomaly detection. Finds small colored regions whose color is statistically rare for the scene (orange, blue, red, green, etc.). Uses LAB colorfulness + histogram rarity. Filters noise via min area (50px), min rarity (2.5), and ignore mask for text markers. Saves annotated images to `scenes/anomalies/` and builds `preview_color_anomalies.mp4` (orig + anomaly, 1s each). |
 | `--recording-time` | None | Override recording time (ISO format, e.g. '2026-08-15 12:08:14'). Use when camera clock is wrong. |
 | `--context-file` | None | Path to JSON mission context config. Overrides `--context-preset` and `--helicopter`. See `contexts/` for examples. |
-| `--context-preset` | None | Named preset: `sar`, `sar-heli`. Overrides `--helicopter`. Default (none specified) loads `sar`. |
+| `--context-preset` | `sar` | Named preset: `sar`, `sar-heli`. Overrides `--helicopter`. Default (none specified) loads `sar`. |
 | `--llm-no-two-stage` | off | Disable two-stage LLM for the **deep** pass (on by default). The **fast** pass is always single-stage. Two-stage (deep only): vision model describes scene (no judgment), reasoning model concludes from description + context. Uses `--llm-deep-model` as vision, `--llm-reasoning-model` as reasoning. |
 | `--llm-reasoning-model` | `glm-5.1:cloud` | Reasoning model for two-stage mode (text-only, no image). |
 | `--llm-parallel` | `0` | Number of parallel LLM workers (0 = sequential). Cloud models can handle 4+ concurrent requests (~5x speedup). Local models should stay at 0 (VRAM-bound). See `LLM.PARALLELISM.md` for benchmark details. |
