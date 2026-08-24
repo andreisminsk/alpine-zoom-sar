@@ -123,6 +123,8 @@ vision-capable LLMs for visual analysis.
 pip install -e .
 ```
 
+> **After updates:** If you `git pull` to get code changes, most take effect immediately (editable mode). But if `pyproject.toml` changed (new dependencies, new commands, version bump), re-run `pip install -e .` to pick those up. It's safe to run anytime.
+
 This installs 11 console commands on your PATH:
 
 | Command | Purpose |
