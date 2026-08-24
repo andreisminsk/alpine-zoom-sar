@@ -1,9 +1,13 @@
 # Alpine Zoom — AI-Assisted Mountain Search & Rescue Video Analysis
 
-A toolset for analyzing drone and helicopter video footage to find lost climbers 
+A toolset for analyzing drone and helicopter video footage to help find lost climbers 
 in mountain terrain. Uses a hybrid pipeline: classical computer vision for frame 
 quality filtering, scene grouping, and color anomaly detection, then
 vision-capable LLMs for visual analysis.
+
+> **Origin story:** This toolset was created in August 2026 during a volunteer search 
+> and rescue operation near Kurumdy peak in Kyrgyzstan, where three climbers from 
+> Belarus and Lithuania were lost.
 
 ## Setup & Installation
 
